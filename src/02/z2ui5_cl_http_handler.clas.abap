@@ -101,7 +101,7 @@ CLASS z2ui5_cl_http_handler IMPLEMENTATION.
 
   METHOD factory.
 
-    result = NEW #( ).
+    CREATE OBJECT result.
 
     IF server IS BOUND.
       result->mo_server = z2ui5_cl_util_http=>factory( server ).
@@ -117,7 +117,7 @@ CLASS z2ui5_cl_http_handler IMPLEMENTATION.
 
   METHOD factory_cloud.
 
-    result = NEW #( ).
+    CREATE OBJECT result.
     result->mo_server = z2ui5_cl_util_http=>factory_cloud( req = req
                                                            res = res ).
 
@@ -126,11 +126,16 @@ CLASS z2ui5_cl_http_handler IMPLEMENTATION.
 
   METHOD _http_get.
 
-    DATA(ls_config) = is_config.
+    DATA ls_config LIKE is_config.
+      DATA lv_style_css TYPE string.
+    DATA temp1 LIKE LINE OF ls_config-t_add_config.
+    DATA lr_config LIKE REF TO temp1.
+    ls_config = is_config.
     z2ui5_cl_exit=>get_instance( )->set_config_http_get( CHANGING cs_config = ls_config ).
 
     IF ls_config-styles_css IS INITIAL.
-      DATA(lv_style_css) = z2ui5_cl_app_style_css=>get( ).
+      
+      lv_style_css = z2ui5_cl_app_style_css=>get( ).
     ELSE.
       lv_style_css = ls_config-styles_css.
     ENDIF.
@@ -170,7 +175,9 @@ CLASS z2ui5_cl_http_handler IMPLEMENTATION.
                  |data-sap-ui-compatVersion="edge" data-sap-ui-async="true" data-sap-ui-frameOptions="trusted" data-sap-ui-bindingSyntax="complex"| && |\n| &&
                  |data-sap-ui-theme="{ ls_config-theme  }" src=" { ls_config-src }"   |.
 
-    LOOP AT ls_config-t_add_config REFERENCE INTO DATA(lr_config).
+    
+    
+    LOOP AT ls_config-t_add_config REFERENCE INTO lr_config.
       result-body = |{ result-body } { lr_config->n }='{ lr_config->v }'|.
     ENDLOOP.
 
@@ -188,7 +195,8 @@ CLASS z2ui5_cl_http_handler IMPLEMENTATION.
 
   METHOD run.
 
-    DATA(lo_handler) = factory( server = server
+    DATA lo_handler TYPE REF TO z2ui5_cl_http_handler.
+    lo_handler = factory( server = server
                                 req    = req
                                 res    = res ).
 
@@ -198,17 +206,25 @@ CLASS z2ui5_cl_http_handler IMPLEMENTATION.
 
 
   METHOD set_response.
+    DATA temp2 TYPE z2ui5_if_types=>ty_s_http_config.
+    DATA ls_config LIKE temp2.
+    DATA ls_header LIKE LINE OF ls_config-t_security_header.
+        DATA lv_contextid TYPE string.
 
     mo_server->set_cdata( ms_res-body ).
 
 
-    DATA(ls_config) = VALUE z2ui5_if_types=>ty_s_http_config( ).
+    
+    CLEAR temp2.
+    
+    ls_config = temp2.
     z2ui5_cl_exit=>get_instance( )->set_config_http_get( CHANGING cs_config = ls_config ).
 
 *    mo_server->set_header_field( n = `cache-control`
 *                                 v = `no-cache` ).
 
-    LOOP AT ls_config-t_security_header INTO DATA(ls_header).
+    
+    LOOP AT ls_config-t_security_header INTO ls_header.
       mo_server->set_header_field( n = ls_header-n
                                    v = ls_header-v ).
     ENDLOOP.
@@ -223,7 +239,8 @@ CLASS z2ui5_cl_http_handler IMPLEMENTATION.
     IF ms_res-s_stateful-switched = abap_true.
       mo_server->set_session_stateful( ms_res-s_stateful-active ).
       IF mo_server->get_header_field( 'sap-contextid-accept' ) = 'header'.
-        DATA(lv_contextid) = mo_server->get_response_cookie( 'sap-contextid' ).
+        
+        lv_contextid = mo_server->get_response_cookie( 'sap-contextid' ).
         IF lv_contextid IS NOT INITIAL.
           mo_server->delete_response_cookie( 'sap-contextid' ).
           mo_server->set_header_field( n = 'sap-contextid'
@@ -242,10 +259,15 @@ CLASS z2ui5_cl_http_handler IMPLEMENTATION.
 
 
   METHOD _http_post.
+          DATA lo_post TYPE REF TO z2ui5_cl_core_handler.
+              DATA temp3 TYPE REF TO z2ui5_if_app.
+              DATA li_app LIKE temp3.
+        DATA x TYPE REF TO cx_root.
     TRY.
 
         IF so_sticky_handler IS NOT BOUND.
-          DATA(lo_post) = NEW z2ui5_cl_core_handler( is_req-body ).
+          
+          CREATE OBJECT lo_post TYPE z2ui5_cl_core_handler EXPORTING VAL = is_req-body.
         ELSE.
           lo_post = so_sticky_handler.
           lo_post->mv_request_json = is_req-body.
@@ -255,7 +277,10 @@ CLASS z2ui5_cl_http_handler IMPLEMENTATION.
 
         TRY.
             IF lo_post IS BOUND.
-              DATA(li_app) = CAST z2ui5_if_app( lo_post->mo_action->mo_app->mo_app ).
+              
+              temp3 ?= lo_post->mo_action->mo_app->mo_app.
+              
+              li_app = temp3.
               IF li_app->check_sticky = abap_true.
                 so_sticky_handler = lo_post.
               ELSE.
@@ -266,12 +291,14 @@ CLASS z2ui5_cl_http_handler IMPLEMENTATION.
         ENDTRY.
 
 
-      CATCH cx_root INTO DATA(x).
+        
+      CATCH cx_root INTO x.
 *        ASSERT x->get_text( ) = 1.
 
-        result = VALUE #( body  = `abap2UI5 Error:` && x->get_text( )
-                  status_code   = 500
-                  status_reason = `error` ).
+        CLEAR result.
+        result-body = `abap2UI5 Error:` && x->get_text( ).
+        result-status_code = 500.
+        result-status_reason = `error`.
     ENDTRY.
   ENDMETHOD.
 
@@ -293,7 +320,8 @@ CLASS z2ui5_cl_http_handler IMPLEMENTATION.
 
   METHOD get_request.
 
-    DATA(lo_handler) = factory( server = server
+    DATA lo_handler TYPE REF TO z2ui5_cl_http_handler.
+    lo_handler = factory( server = server
                                 req    = req
                                 res    = res ).
 
